@@ -17,26 +17,77 @@ Product.hasMany(Rating);
 Rating.belongsTo(Product);
 
 // =======================
+// SHOE CATALOG (DummyJSON — free, no key)
+// =======================
+
+app.get("/api/sneakers", async (req, res) => {
+  const { keyword, category = "all-shoes", limit = "24" } = req.query;
+  const num = Math.min(Math.max(parseInt(limit) || 24, 1), 100);
+  const SHOE_CATS = ["mens-shoes", "womens-shoes"];
+
+  try {
+    // Keyword search — filter results to shoes only
+    if (keyword && keyword.trim()) {
+      const url = `https://dummyjson.com/products/search?q=${encodeURIComponent(keyword.trim())}&limit=100`;
+      const response = await fetch(url);
+      const data = await response.json();
+      const shoes = (data.products || [])
+        .filter((p) => SHOE_CATS.includes(p.category))
+        .slice(0, num);
+      return res.json({ results: shoes, count: shoes.length });
+    }
+
+    // "All shoes" — fetch both categories and interleave
+    if (category === "all-shoes") {
+      const half = Math.ceil(num / 2);
+      const [r1, r2] = await Promise.all([
+        fetch(`https://dummyjson.com/products/category/mens-shoes?limit=${half}`),
+        fetch(`https://dummyjson.com/products/category/womens-shoes?limit=${num - half}`),
+      ]);
+      const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
+      const products = [...(d1.products || []), ...(d2.products || [])];
+      return res.json({ results: products, count: products.length });
+    }
+
+    // Single shoe category
+    const url = `https://dummyjson.com/products/category/${encodeURIComponent(category)}?limit=${num}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json({ results: data.products || [], count: data.total || 0 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// =======================
 // PRODUCTS
 // =======================
 
 app.get("/products", async (req, res) => {
   const products = await Product.findAll({
-    include: [{ model: Rating }]
+    include: [{ model: Rating }],
   });
   res.json(products);
 });
 
 app.get("/products/:id", async (req, res) => {
   const product = await Product.findByPk(req.params.id, {
-    include: [{ model: Rating }]
+    include: [{ model: Rating }],
   });
   res.json(product);
 });
 
 app.post("/products", async (req, res) => {
-  const product = await Product.create(req.body);
-  res.json(product);
+  try {
+    const product = await Product.create(req.body);
+    res.json(product);
+  } catch (err) {
+    if (err.name === "SequelizeUniqueConstraintError") {
+      const existing = await Product.findOne({ where: { name: req.body.name } });
+      return res.json(existing);
+    }
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.put("/products/:id", async (req, res) => {
@@ -58,7 +109,7 @@ app.post("/products/:id/ratings", async (req, res) => {
   if (!product) return res.status(404).json({ message: "Product not found" });
   const rating = await Rating.create({
     rating: req.body.rating,
-    ProductId: req.params.id
+    ProductId: req.params.id,
   });
   res.json(rating);
 });
@@ -78,11 +129,79 @@ app.post("/cart", async (req, res) => {
 
 app.post("/cart/:cartId/products/:productId", async (req, res) => {
   try {
-    const cart = await Cart.findByPk(req.params.cartId);
+    let cart = await Cart.findByPk(req.params.cartId);
+    if (!cart) {
+      cart = await Cart.create({ id: req.params.cartId });
+    }
     const product = await Product.findByPk(req.params.productId);
-    if (!cart || !product) return res.status(404).json({ message: "Not found" });
-    await cart.addProduct(product);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    
+    const cartItem = await CartItem.findOne({
+      where: { CartId: cart.id, ProductId: product.id }
+    });
+
+    if (cartItem) {
+      await CartItem.update(
+        { quantity: cartItem.quantity + 1 },
+        { where: { CartId: cart.id, ProductId: product.id } }
+      );
+    } else {
+      try {
+        await cart.addProduct(product, { through: { quantity: 1 } });
+      } catch (e) {
+        // SQLite doesn't drop old unique constraints during alter:true.
+        // If it blocks adding multiple items, we force recreate the junction table to fix the schema permanently.
+        await CartItem.sync({ force: true });
+        await cart.addProduct(product, { through: { quantity: 1 } });
+      }
+    }
+    
     res.json({ message: "Product added to cart" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/cart/:cartId/products/:productId", async (req, res) => {
+  try {
+    const { quantity } = req.body;
+    const cartItem = await CartItem.findOne({
+      where: { CartId: req.params.cartId, ProductId: req.params.productId }
+    });
+    if (cartItem) {
+      await CartItem.update(
+        { quantity: quantity },
+        { where: { CartId: req.params.cartId, ProductId: req.params.productId } }
+      );
+      res.json({ message: "Quantity updated" });
+    } else {
+      res.status(404).json({ message: "Product not found in cart" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/cart/:cartId/products/:productId", async (req, res) => {
+  try {
+    const cartItem = await CartItem.findOne({
+      where: { CartId: req.params.cartId, ProductId: req.params.productId }
+    });
+    if (cartItem) {
+      await cartItem.destroy();
+      res.json({ message: "Product removed from cart" });
+    } else {
+      res.status(404).json({ message: "Product not found in cart" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/cart/:cartId/empty", async (req, res) => {
+  try {
+    await CartItem.destroy({ where: { CartId: req.params.cartId } });
+    res.json({ message: "Cart emptied" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -93,10 +212,13 @@ app.get("/cart/:cartId", async (req, res) => {
     const cart = await Cart.findByPk(req.params.cartId, {
       include: {
         model: Product,
-        through: { attributes: ["quantity"] }
-      }
+        through: { attributes: ["quantity"] },
+      },
     });
-    if (!cart) return res.status(404).json({ message: "Cart not found" });
+    if (!cart) {
+      await Cart.create({ id: req.params.cartId });
+      return res.json({ id: parseInt(req.params.cartId), Products: [] });
+    }
     res.json(cart);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -106,9 +228,32 @@ app.get("/cart/:cartId", async (req, res) => {
 // =======================
 // STARTA SERVER
 // =======================
-sequelize.sync({ force: true }).then(() => {
+const startServer = async () => {
+  await sequelize.query('PRAGMA foreign_keys = OFF');
+  
+  // Clean up any broken backup tables left behind by previous crashes
+  try {
+    await sequelize.query('DROP TABLE IF EXISTS `Products_backup`;');
+    await sequelize.query('DROP TABLE IF EXISTS `Carts_backup`;');
+    await sequelize.query('DROP TABLE IF EXISTS `CartItems_backup`;');
+    await sequelize.query('DROP TABLE IF EXISTS `Ratings_backup`;');
+  } catch (err) {
+    // Ignore if tables don't exist
+  }
+
+  await sequelize.sync({ alter: true });
+  await sequelize.query('PRAGMA foreign_keys = ON');
+  
   console.log("All models synced");
+  
+  const defaultCart = await Cart.findByPk(1);
+  if (!defaultCart) {
+    await Cart.create({ id: 1 });
+  }
+
   app.listen(3000, () => {
     console.log("Server running on port 3000");
   });
-});
+};
+
+startServer();
