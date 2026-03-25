@@ -234,6 +234,7 @@ function ProductList() {
     .filter((p) => !keyword.trim() || p.name.toLowerCase().includes(keyword.toLowerCase()))
     .map((p) => ({
       id: `local-${p.id}`,
+      dbId: p.id,
       name: p.name,
       price: p.price,
       priceDisplay: `${Number(p.price).toLocaleString("sv-SE")} kr`,
@@ -244,26 +245,39 @@ function ProductList() {
       isLocal: true,
     }));
 
-  const normalizedApi = apiProducts.map((p) => ({
-    id: `api-${p.id}`,
-    name: p.title,
-    price: Math.round(p.price * 10.5),
-    priceDisplay: `${Math.round(p.price * 10.5).toLocaleString("sv-SE")} kr`,
-    image: p.thumbnail,
-    brand: p.brand,
-    badge: p.category?.replace(/-/g, " "),
-    source: "api",
-    isLocal: false,
-    apiData: p,
-  }));
+  // Deduplicate local products by name (keep first occurrence)
+  const seenNames = new Set();
+  const deduplicatedLocal = normalizedLocal.filter((p) => {
+    const key = p.name.toLowerCase();
+    if (seenNames.has(key)) return false;
+    seenNames.add(key);
+    return true;
+  });
 
-  const combined = [...normalizedLocal, ...normalizedApi].sort((a, b) => {
+  const normalizedApi = apiProducts
+    .map((p) => ({
+      id: `api-${p.id}`,
+      name: p.title,
+      price: Math.round(p.price * 10.5),
+      priceDisplay: `${Math.round(p.price * 10.5).toLocaleString("sv-SE")} kr`,
+      image: p.thumbnail,
+      brand: p.brand,
+      badge: p.category?.replace(/-/g, " "),
+      source: "api",
+      isLocal: false,
+      apiData: p,
+    }))
+    // Remove API products whose names already exist in local list
+    .filter((p) => !seenNames.has(p.name.toLowerCase()));
+
+  const combined = [...deduplicatedLocal, ...normalizedApi].sort((a, b) => {
     if (sortBy === "price_asc") return a.price - b.price;
     if (sortBy === "price_desc") return b.price - a.price;
     if (sortBy === "name_asc") return a.name.localeCompare(b.name);
-    // Default: local always first
+    // Default: local products first, newest (highest dbId) first within local
     if (a.isLocal && !b.isLocal) return -1;
     if (!a.isLocal && b.isLocal) return 1;
+    if (a.isLocal && b.isLocal) return b.dbId - a.dbId;
     return 0;
   });
 
@@ -297,7 +311,7 @@ function ProductList() {
             <FormControl size="small" sx={{ minWidth: { xs: 120, sm: 145 }, flexShrink: 0 }}>
               <InputLabel>Sortera</InputLabel>
               <Select value={sortBy} label="Sortera" onChange={(e) => setSortBy(e.target.value)}>
-                <MenuItem value="default">Egna skor först</MenuItem>
+                <MenuItem value="default">Senast tillagda</MenuItem>
                 <MenuItem value="price_asc">Pris ↑</MenuItem>
                 <MenuItem value="price_desc">Pris ↓</MenuItem>
                 <MenuItem value="name_asc">A → Ö</MenuItem>
@@ -341,7 +355,7 @@ function ProductList() {
 
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 1.5 }}>
             <Typography sx={{ fontSize: "0.72rem", color: "#9CA3AF" }}>
-              {combined.length} skor · {normalizedLocal.length} egna + {normalizedApi.length} från katalog
+              {combined.length} skor · {deduplicatedLocal.length} egna + {normalizedApi.length} från katalog
             </Typography>
             <Button
               size="small"

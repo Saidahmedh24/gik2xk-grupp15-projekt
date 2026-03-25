@@ -213,8 +213,8 @@ function Navbar() {
         {/* Drawer links */}
         <Box sx={{ p: 2, flex: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
           {[
-            { label: "👟 Produkter", path: "/" },
-            { label: "✏️ Skapa produkt", path: "/products/new" },
+            { label: "Produkter", path: "/" },
+            { label: "Skapa produkt", path: "/products/new" },
           ].map((item) => (
             <Button
               key={item.path}
