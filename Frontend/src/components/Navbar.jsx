@@ -90,7 +90,7 @@ function Navbar() {
   const [cartCount, setCartCount] = useState(0);
 
   const fetchCartCount = () => {
-    axios.get("http://localhost:3000/cart/1")
+    axios.get(`${import.meta.env.VITE_API_URL}/cart/1`)
       .then((res) => {
         if (res.data && res.data.Products) {
           const count = res.data.Products.reduce((sum, p) => sum + (p.CartItem?.quantity || 1), 0);

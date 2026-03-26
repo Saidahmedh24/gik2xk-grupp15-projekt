@@ -5,7 +5,6 @@ import {
   CardContent,
   CardMedia,
   Chip,
-  CircularProgress,
   Container,
   FormControl,
   Grid,
@@ -22,7 +21,7 @@ import { useNavigate } from "react-router-dom";
 
 // ─── Shared Card ──────────────────────────────────────────────────────────────
 
-function ProductCard({ name, price, image, brand, badge, isLocal, ctaLabel, ctaDisabled, ctaVariant, onCardClick, onButtonClick }) {
+function ProductCard({ name, price, image, ctaLabel, ctaDisabled, ctaVariant, onCardClick, onButtonClick }) {
   return (
     <Grid item xs={6} sm={6} md={4} lg={3}>
       <Card
@@ -47,58 +46,36 @@ function ProductCard({ name, price, image, brand, badge, isLocal, ctaLabel, ctaD
               "&:hover": { transform: "scale(1.05)" },
             }}
           />
-          {isLocal && (
-            <Chip
-              label="G-15"
-              size="small"
-              sx={{
-                position: "absolute",
-                top: 10,
-                left: 10,
-                background: "#4F46E5",
-                color: "#fff",
-                fontWeight: 700,
-                fontSize: "0.6rem",
-                letterSpacing: "0.08em",
-                height: 20,
-              }}
-            />
-          )}
-          {badge && !isLocal && (
-            <Chip
-              label={badge}
-              size="small"
-              sx={{
-                position: "absolute",
-                top: 10,
-                left: 10,
-                background: "rgba(255,255,255,0.92)",
-                color: "#4B5563",
-                fontWeight: 600,
-                fontSize: "0.62rem",
-                letterSpacing: "0.04em",
-                height: 20,
-                textTransform: "capitalize",
-              }}
-            />
-          )}
+          <Chip
+            label="G-15"
+            size="small"
+            sx={{
+              position: "absolute",
+              top: 10,
+              left: 10,
+              background: "#4F46E5",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: "0.6rem",
+              letterSpacing: "0.08em",
+              height: 20,
+            }}
+          />
         </Box>
 
         <CardContent sx={{ flex: 1, p: 2, pb: 1 }}>
-          {brand && (
-            <Typography
-              sx={{
-                fontSize: "0.68rem",
-                fontWeight: 700,
-                color: "#9CA3AF",
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                mb: 0.4,
-              }}
-            >
-              {brand}
-            </Typography>
-          )}
+          <Typography
+            sx={{
+              fontSize: "0.68rem",
+              fontWeight: 700,
+              color: "#9CA3AF",
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              mb: 0.4,
+            }}
+          >
+            G-15 Shoes
+          </Typography>
           <Typography
             sx={{
               fontWeight: 700,
@@ -159,67 +136,25 @@ function ProductCard({ name, price, image, brand, badge, isLocal, ctaLabel, ctaD
 function ProductList() {
   const navigate = useNavigate();
 
-  const [localProducts, setLocalProducts] = useState([]);
-  const [apiProducts, setApiProducts] = useState([]);
-  const [loading, setLoading] = useState(false);
-
+  const [products, setProducts] = useState([]);
   const [keyword, setKeyword] = useState("");
-  const [apiLimit, setApiLimit] = useState("24");
   const [sortBy, setSortBy] = useState("default");
-
   const [addingId, setAddingId] = useState(null);
   const [addedIds, setAddedIds] = useState(new Set());
 
-  // Fetch local products
-  useEffect(() => {
-    axios
-      .get("http://localhost:3000/products")
-      .then((res) => setLocalProducts(res.data))
-      .catch(() => {});
-  }, []);
-
-  // Fetch API products on mount
-  useEffect(() => {
-    fetchApiProducts("", "all-shoes", "24");
-  }, []);
-
-  const fetchApiProducts = async (kw, cat, lim) => {
-    setLoading(true);
-    try {
-      const params = { limit: lim };
-      if (kw.trim()) {
-        params.keyword = kw.trim();
-      } else {
-        params.category = "all-shoes";
-      }
-      const res = await axios.get("http://localhost:3000/api/sneakers", { params });
-      setApiProducts(res.data.results || []);
-    } catch {
-      setApiProducts([]);
-    } finally {
-      setLoading(false);
-    }
+  const fetchProducts = () => {
+    axios.get(`${import.meta.env.VITE_API_URL}/products`).then((res) => setProducts(res.data)).catch(() => {});
   };
 
-  const handleSearch = () => fetchApiProducts(keyword, "all-shoes", apiLimit);
+  useEffect(() => {
+    fetchProducts();
+  }, []);
 
-  const handleAddToCart = async (item) => {
-    setAddingId(item.id);
+  const handleAddToCart = async (product) => {
+    setAddingId(product.id);
     try {
-      if (item.source === "local") {
-        const localId = item.id.replace("local-", "");
-        await axios.post(`http://localhost:3000/cart/1/products/${localId}`);
-      } else {
-        const shoe = item.apiData;
-        const productRes = await axios.post("http://localhost:3000/products", {
-          name: shoe.title,
-          price: Math.round(shoe.price * 10.5),
-          description: shoe.description || "",
-          imageUrl: shoe.thumbnail || "",
-        });
-        await axios.post(`http://localhost:3000/cart/1/products/${productRes.data.id}`);
-      }
-      setAddedIds((prev) => new Set([...prev, item.id]));
+      await axios.post(`${import.meta.env.VITE_API_URL}/cart/1/products/${product.id}`);
+      setAddedIds((prev) => new Set([...prev, product.id]));
       window.dispatchEvent(new Event("cartUpdated"));
     } catch (err) {
       console.error("Kunde inte lägga till produkt:", err);
@@ -229,57 +164,14 @@ function ProductList() {
     }
   };
 
-  // Normalize & merge — local first
-  const normalizedLocal = localProducts
+  const filtered = products
     .filter((p) => !keyword.trim() || p.name.toLowerCase().includes(keyword.toLowerCase()))
-    .map((p) => ({
-      id: `local-${p.id}`,
-      dbId: p.id,
-      name: p.name,
-      price: p.price,
-      priceDisplay: `${Number(p.price).toLocaleString("sv-SE")} kr`,
-      image: p.imageUrl,
-      brand: "G-15 Shoes",
-      badge: null,
-      source: "local",
-      isLocal: true,
-    }));
-
-  // Deduplicate local products by name (keep first occurrence)
-  const seenNames = new Set();
-  const deduplicatedLocal = normalizedLocal.filter((p) => {
-    const key = p.name.toLowerCase();
-    if (seenNames.has(key)) return false;
-    seenNames.add(key);
-    return true;
-  });
-
-  const normalizedApi = apiProducts
-    .map((p) => ({
-      id: `api-${p.id}`,
-      name: p.title,
-      price: Math.round(p.price * 10.5),
-      priceDisplay: `${Math.round(p.price * 10.5).toLocaleString("sv-SE")} kr`,
-      image: p.thumbnail,
-      brand: p.brand,
-      badge: p.category?.replace(/-/g, " "),
-      source: "api",
-      isLocal: false,
-      apiData: p,
-    }))
-    // Remove API products whose names already exist in local list
-    .filter((p) => !seenNames.has(p.name.toLowerCase()));
-
-  const combined = [...deduplicatedLocal, ...normalizedApi].sort((a, b) => {
-    if (sortBy === "price_asc") return a.price - b.price;
-    if (sortBy === "price_desc") return b.price - a.price;
-    if (sortBy === "name_asc") return a.name.localeCompare(b.name);
-    // Default: local products first, newest (highest dbId) first within local
-    if (a.isLocal && !b.isLocal) return -1;
-    if (!a.isLocal && b.isLocal) return 1;
-    if (a.isLocal && b.isLocal) return b.dbId - a.dbId;
-    return 0;
-  });
+    .sort((a, b) => {
+      if (sortBy === "price_asc") return a.price - b.price;
+      if (sortBy === "price_desc") return b.price - a.price;
+      if (sortBy === "name_asc") return a.name.localeCompare(b.name);
+      return b.id - a.id; // default: senast tillagda
+    });
 
   return (
     <Box sx={{ background: "#F5F5F7", minHeight: "100vh" }}>
@@ -295,14 +187,12 @@ function ProductList() {
             boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
           }}
         >
-          {/* Search + controls */}
           <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "stretch" }}>
             <TextField
               placeholder="Sök skor…"
               size="small"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               sx={{ flex: "1 1 160px", minWidth: 0 }}
               InputProps={{
                 startAdornment: <Box component="span" sx={{ mr: 1, color: "#9CA3AF", fontSize: "0.9rem" }}>🔍</Box>,
@@ -317,27 +207,6 @@ function ProductList() {
                 <MenuItem value="name_asc">A → Ö</MenuItem>
               </Select>
             </FormControl>
-            <FormControl size="small" sx={{ minWidth: 90, flexShrink: 0 }}>
-              <InputLabel>Antal</InputLabel>
-              <Select
-                value={apiLimit}
-                label="Antal"
-            onChange={(e) => { setApiLimit(e.target.value); fetchApiProducts(keyword, "all-shoes", e.target.value); }}
-              >
-                <MenuItem value="12">12</MenuItem>
-                <MenuItem value="24">24</MenuItem>
-                <MenuItem value="36">36</MenuItem>
-                <MenuItem value="48">48</MenuItem>
-              </Select>
-            </FormControl>
-            <Button
-              variant="contained"
-              onClick={handleSearch}
-              disabled={loading}
-              sx={{ height: 40, px: { xs: 2, sm: 3 }, borderRadius: "10px", flexShrink: 0 }}
-            >
-              {loading ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Sök"}
-            </Button>
             <Button
               variant="outlined"
               onClick={() => navigate("/products/new")}
@@ -355,7 +224,7 @@ function ProductList() {
 
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 1.5 }}>
             <Typography sx={{ fontSize: "0.72rem", color: "#9CA3AF" }}>
-              {combined.length} skor · {deduplicatedLocal.length} egna + {normalizedApi.length} från katalog
+              {filtered.length} skor
             </Typography>
             <Button
               size="small"
@@ -368,41 +237,30 @@ function ProductList() {
         </Box>
 
         {/* Product grid */}
-        {loading && normalizedApi.length === 0 ? (
-          <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 12, gap: 2 }}>
-            <CircularProgress sx={{ color: "#4F46E5" }} />
-            <Typography sx={{ color: "#6B7280" }}>Laddar produkter…</Typography>
-          </Box>
-        ) : combined.length === 0 ? (
+        {filtered.length === 0 ? (
           <Box sx={{ textAlign: "center", py: 12 }}>
             <Typography sx={{ fontSize: "3rem", mb: 2 }}>👟</Typography>
             <Typography variant="h6" sx={{ color: "#6B7280" }}>Inga produkter hittades</Typography>
-            <Button
-            onClick={() => { setKeyword(""); setSortBy("default"); fetchApiProducts("", "all-shoes", apiLimit); }}
-              sx={{ mt: 2 }}
-            >
+            <Button onClick={() => { setKeyword(""); setSortBy("default"); }} sx={{ mt: 2 }}>
               Rensa filter
             </Button>
           </Box>
         ) : (
           <Grid container spacing={{ xs: 1.5, sm: 2.5 }}>
-            {combined.map((item) => {
-              const isAdded = addedIds.has(item.id);
-              const isAdding = addingId === item.id;
+            {filtered.map((product) => {
+              const isAdded = addedIds.has(product.id);
+              const isAdding = addingId === product.id;
               return (
                 <ProductCard
-                  key={item.id}
-                  name={item.name}
-                  price={item.priceDisplay}
-                  image={item.image}
-                  brand={item.brand}
-                  badge={item.badge}
-                  isLocal={item.isLocal}
+                  key={product.id}
+                  name={product.name}
+                  price={`${Number(product.price).toLocaleString("sv-SE")} kr`}
+                  image={product.imageUrl}
                   ctaLabel={isAdded ? "I varukorgen" : isAdding ? "…" : "Lägg i varukorg"}
                   ctaDisabled={isAdded || isAdding}
                   ctaVariant={isAdded ? "outlined" : "contained"}
-                  onCardClick={item.isLocal ? () => navigate(`/products/${item.id.replace("local-", "")}`) : undefined}
-                  onButtonClick={() => handleAddToCart(item)}
+                  onCardClick={() => navigate(`/products/${product.id}`)}
+                  onButtonClick={() => handleAddToCart(product)}
                 />
               );
             })}

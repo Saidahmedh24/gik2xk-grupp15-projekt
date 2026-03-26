@@ -31,7 +31,7 @@ function ProductForm() {
       setErrors(errs);
       return;
     }
-    axios.post("http://localhost:3000/products", { ...form, price: Number(form.price) }).then(() => {
+    axios.post(`${import.meta.env.VITE_API_URL}/products`, { ...form, price: Number(form.price) }).then(() => {
       navigate("/");
     });
   };
@@ -53,11 +53,12 @@ function ProductForm() {
         <TextField
           label="Pris (kr) *"
           name="price"
+          type="number"
           value={form.price}
           onChange={handleChange}
           error={!!errors.price}
           helperText={errors.price}
-          inputProps={{ inputMode: "numeric" }}
+          inputProps={{ min: 1, step: 1 }}
         />
         <TextField
           label="Beskrivning"

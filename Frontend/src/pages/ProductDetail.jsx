@@ -11,22 +11,22 @@ function ProductDetail() {
   const [userRating, setUserRating] = useState(0);
 
   useEffect(() => {
-    axios.get(`http://localhost:3000/products/${id}`).then((res) => {
+    axios.get(`${import.meta.env.VITE_API_URL}/products/${id}`).then((res) => {
       setProduct(res.data);
     });
   }, [id]);
 
   const handleRating = (value) => {
     setUserRating(value);
-    axios.post(`http://localhost:3000/products/${id}/ratings`, { rating: value }).then(() => {
-      axios.get(`http://localhost:3000/products/${id}`).then((res) => {
+    axios.post(`${import.meta.env.VITE_API_URL}/products/${id}/ratings`, { rating: value }).then(() => {
+      axios.get(`${import.meta.env.VITE_API_URL}/products/${id}`).then((res) => {
         setProduct(res.data);
       });
     });
   };
 
   const addToCart = () => {
-    axios.post(`http://localhost:3000/cart/1/products/${id}`)
+    axios.post(`${import.meta.env.VITE_API_URL}/cart/1/products/${id}`)
       .then(() => {
         window.dispatchEvent(new Event("cartUpdated"));
         navigate("/cart");

@@ -17,49 +17,6 @@ Product.hasMany(Rating);
 Rating.belongsTo(Product);
 
 // =======================
-// SHOE CATALOG (DummyJSON — free, no key)
-// =======================
-
-app.get("/api/sneakers", async (req, res) => {
-  const { keyword, category = "all-shoes", limit = "24" } = req.query;
-  const num = Math.min(Math.max(parseInt(limit) || 24, 1), 100);
-  const SHOE_CATS = ["mens-shoes", "womens-shoes"];
-
-  try {
-    // Keyword search — filter results to shoes only
-    if (keyword && keyword.trim()) {
-      const url = `https://dummyjson.com/products/search?q=${encodeURIComponent(keyword.trim())}&limit=100`;
-      const response = await fetch(url);
-      const data = await response.json();
-      const shoes = (data.products || [])
-        .filter((p) => SHOE_CATS.includes(p.category))
-        .slice(0, num);
-      return res.json({ results: shoes, count: shoes.length });
-    }
-
-    // "All shoes" — fetch both categories and interleave
-    if (category === "all-shoes") {
-      const half = Math.ceil(num / 2);
-      const [r1, r2] = await Promise.all([
-        fetch(`https://dummyjson.com/products/category/mens-shoes?limit=${half}`),
-        fetch(`https://dummyjson.com/products/category/womens-shoes?limit=${num - half}`),
-      ]);
-      const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
-      const products = [...(d1.products || []), ...(d2.products || [])];
-      return res.json({ results: products, count: products.length });
-    }
-
-    // Single shoe category
-    const url = `https://dummyjson.com/products/category/${encodeURIComponent(category)}?limit=${num}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    res.json({ results: data.products || [], count: data.total || 0 });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// =======================
 // PRODUCTS
 // =======================
 

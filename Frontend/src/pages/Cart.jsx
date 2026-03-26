@@ -173,7 +173,7 @@ function Cart() {
   const [errors, setErrors] = useState({});
 
   const fetchCart = () => {
-    axios.get("http://localhost:3000/cart/1")
+    axios.get(`${import.meta.env.VITE_API_URL}/cart/1`)
       .then((res) => setCart(res.data))
       .catch((err) => {
         console.error("Fel vid hämtning av varukorg:", err);
@@ -209,7 +209,7 @@ function Cart() {
 
   const submitOrder = async () => {
     try {
-      await axios.delete("http://localhost:3000/cart/1/empty");
+      await axios.delete(`${import.meta.env.VITE_API_URL}/cart/1/empty`);
       setCart({ Products: [] });
       setStep(3);
       window.dispatchEvent(new Event("cartUpdated"));
@@ -221,14 +221,14 @@ function Cart() {
 
   const handleUpdateQuantity = (productId, newQuantity) => {
     if (newQuantity < 1) return;
-    axios.put(`http://localhost:3000/cart/1/products/${productId}`, { quantity: newQuantity }).then(() => {
+    axios.put(`${import.meta.env.VITE_API_URL}/cart/1/products/${productId}`, { quantity: newQuantity }).then(() => {
       fetchCart();
       window.dispatchEvent(new Event("cartUpdated"));
     });
   };
 
   const handleRemove = (productId) => {
-    axios.delete(`http://localhost:3000/cart/1/products/${productId}`).then(() => {
+    axios.delete(`${import.meta.env.VITE_API_URL}/cart/1/products/${productId}`).then(() => {
       fetchCart();
       window.dispatchEvent(new Event("cartUpdated"));
     });
